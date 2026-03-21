@@ -1,7 +1,30 @@
+import os
+import threading
+from flask import Flask
+
+# --- INICIO INMEDIATO DEL SERVIDOR WEB (Para evitar Timeouts en Render) ---
+web_app = Flask(__name__)
+
+@web_app.route('/')
+def home():
+    return "🤖 Astabot Supreme is Online and Trading! 💹"
+
+@web_app.route('/health')
+def health():
+    return {"status": "ok", "version": "1.2.0"}
+
+def run_web_server():
+    # Render usa la variable de entorno PORT (o por defecto 10000)
+    port = int(os.environ.get("PORT", 10000))
+    print(f"--- Iniciando Servidor Web en puerto {port} ---")
+    web_app.run(host='0.0.0.0', port=port)
+
+# Lanzar el servidor en un hilo secundario INMEDIATAMENTE
+threading.Thread(target=run_web_server, daemon=True).start()
+
 # bot_auto.py
 import logging
 import sys
-import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 import telegram
@@ -57,24 +80,7 @@ from errors import AstabotError, notify_critical_error, retry_on_failure
 from realtime_streaming import start_streaming, stop_all_streaming
 from reinforcement_learning import load_rl_model
 from gamification import gamification
-from flask import Flask
-import threading
-
-# --- Flask Server for Render/Ping ---
-web_app = Flask(__name__)
-
-@web_app.route('/')
-def home():
-    return "🤖 Astabot Supreme is Online and Trading! 💹"
-
-@web_app.route('/health')
-def health():
-    return {"status": "ok", "version": "1.0.0"}
-
-def run_web_server():
-    # Render usa la variable de entorno PORT
-    port = int(os.environ.get("PORT", 5000))
-    web_app.run(host='0.0.0.0', port=port)
+# Flask Server ya iniciado arriba
 
 from risk_manager import risk_manager # --- NUEVO: Gestor de Riesgos ---
 from models import init_db # --- NUEVO: Inicializador de DB ---
@@ -636,10 +642,7 @@ def main():
 
     application.post_init = post_init
     
-    # Iniciar servidor web en hilo separado para Render
-    threading.Thread(target=run_web_server, daemon=True).start()
-    logger.info("Servidor Web de salud (Flask) iniciado para mantener el bot despierto.")
-    
+    # Iniciar el bot de Telegram
     try:
         application.run_polling()
     except telegram.error.Conflict:
