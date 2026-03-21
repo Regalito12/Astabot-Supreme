@@ -9,8 +9,12 @@ import json
 
 # Imports condicionales para brokers
 # Imports condicionales para brokers (movidos a métodos para evitar cuelgues)
-MT5_AVAILABLE = True # Asumimos disponible para la clase, se verificará en connect()
-mt5 = None
+try:
+    import MetaTrader5 as mt5
+    MT5_AVAILABLE = True
+except ImportError:
+    MT5_AVAILABLE = False
+    mt5 = None
 
 try:
     import alpaca_trade_api as tradeapi
