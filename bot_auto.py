@@ -57,6 +57,25 @@ from errors import AstabotError, notify_critical_error, retry_on_failure
 from realtime_streaming import start_streaming, stop_all_streaming
 from reinforcement_learning import load_rl_model
 from gamification import gamification
+from flask import Flask
+import threading
+
+# --- Flask Server for Render/Ping ---
+web_app = Flask(__name__)
+
+@web_app.route('/')
+def home():
+    return "🤖 Astabot Supreme is Online and Trading! 💹"
+
+@web_app.route('/health')
+def health():
+    return {"status": "ok", "version": "1.0.0"}
+
+def run_web_server():
+    # Render usa la variable de entorno PORT
+    port = int(os.environ.get("PORT", 5000))
+    web_app.run(host='0.0.0.0', port=port)
+
 from risk_manager import risk_manager # --- NUEVO: Gestor de Riesgos ---
 from models import init_db # --- NUEVO: Inicializador de DB ---
 
@@ -616,6 +635,10 @@ def main():
         logger.info("Streaming inicializado correctamente.")
 
     application.post_init = post_init
+    
+    # Iniciar servidor web en hilo separado para Render
+    threading.Thread(target=run_web_server, daemon=True).start()
+    logger.info("Servidor Web de salud (Flask) iniciado para mantener el bot despierto.")
     
     try:
         application.run_polling()
