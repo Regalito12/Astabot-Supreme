@@ -1,0 +1,14 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+.vscode/
+instance/
+logs/
+*.csv
+*.log
+params.json
+astabot.lock
+trading_model.pkl
+verbose.txt
+bot_output*.txt
