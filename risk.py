@@ -5,17 +5,7 @@ SL/TP basado en ATR, calculo de posicion, log de senales
 import csv
 import os
 from datetime import datetime, timezone
-from config_v2 import ATR_SL_MULT, ATR_TP_MULT, RISK_PER_TRADE, SIGNAL_LOG_FILE
-
-
-def calculate_sl_tp(price, atr, direction):
-    if direction == 'buy':
-        sl = price - atr * ATR_SL_MULT
-        tp = price + atr * ATR_TP_MULT
-    else:
-        sl = price + atr * ATR_SL_MULT
-        tp = price - atr * ATR_TP_MULT
-    return sl, tp
+from config_v2 import RISK_PER_TRADE, SIGNAL_LOG_FILE
 
 
 def calculate_position_size(capital, entry, sl):
