@@ -43,6 +43,9 @@ N8N_WEBHOOK_URL = os.getenv("N8N_WEBHOOK_URL", "")
 WEEKEND_ALERT_HOUR = 20
 WEEKEND_ALERT_DAY = 4
 
+BRIEFING_HOUR = 7
+BRIEFING_MINUTE = 0
+
 SESSIONS = {
     "asia": {"start": 0, "end": 7, "name": "Asia", "emoji": "\U0001F30F"},
     "londres": {"start": 7, "end": 12, "name": "Londres", "emoji": "\U0001F3DB\ufe0f"},
