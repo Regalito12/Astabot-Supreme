@@ -1,0 +1,142 @@
+{
+  "name": "AstaBot Trade Journal",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "astabot-signal",
+        "responseMode": "lastNode",
+        "responseData": "allEntries"
+      },
+      "id": "webhook-node",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "TU_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "AstaBot Journal"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ $json.timestamp }}",
+            "symbol": "={{ $json.symbol }}",
+            "type": "={{ $json.type }}",
+            "price": "={{ $json.price }}",
+            "sl": "={{ $json.sl }}",
+            "tp": "={{ $json.tp }}",
+            "score": "={{ $json.score }}",
+            "details": "={{ $json.details }}",
+            "atr": "={{ $json.atr }}",
+            "resultado": "",
+            "pnl": ""
+          },
+          "matchingColumns": [],
+          "schema": [
+            {"id": "timestamp", "displayName": "timestamp", "required": false, "defaultMatch": false, "display": true, "type": "string"},
+            {"id": "symbol", "displayName": "symbol", "required": false, "defaultMatch": false, "display": true, "type": "string"},
+            {"id": "type", "displayName": "type", "required": false, "defaultMatch": false, "display": true, "type": "string"},
+            {"id": "price", "displayName": "price", "required": false, "defaultMatch": false, "display": true, "type": "string"},
+            {"id": "sl", "displayName": "sl", "required": false, "defaultMatch": false, "display": true, "type": "string"},
+            {"id": "tp", "displayName": "tp", "required": false, "defaultMatch": false, "display": true, "type": "string"},
+            {"id": "score", "displayName": "score", "required": false, "defaultMatch": false, "display": true, "type": "string"},
+            {"id": "details", "displayName": "details", "required": false, "defaultMatch": false, "display": true, "type": "string"},
+            {"id": "atr", "displayName": "atr", "required": false, "defaultMatch": false, "display": true, "type": "string"},
+            {"id": "resultado", "displayName": "resultado", "required": false, "defaultMatch": false, "display": true, "type": "string"},
+            {"id": "pnl", "displayName": "pnl", "required": false, "defaultMatch": false, "display": true, "type": "string"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "gsheet-node",
+      "name": "Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [470, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "TU_GOOGLE_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/bot{{ $env.TELEGRAM_TOKEN }}/sendMessage",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "chat_id",
+              "value": "={{ $env.TELEGRAM_CHAT_ID }}"
+            },
+            {
+              "name": "text",
+              "value": "=✅ Señal registrada en Trade Journal\n\n🪙 {{ $json.symbol }}\n🎯 {{ $json.type.toUpperCase() }}\n📍 Entrada: {{ $json.price }}\n⛔ SL: {{ $json.sl }}\n✅ TP: {{ $json.tp }}\n📊 Score: {{ $json.score }}/6"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "telegram-node",
+      "name": "Confirmar en Telegram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [690, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Confirmar en Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-03-31T00:00:00.000Z",
+  "versionId": "1"
+}

@@ -1,1 +1,1 @@
-web: python bot_auto.py
+web: python astabot_v2.py
