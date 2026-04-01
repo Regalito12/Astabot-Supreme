@@ -9,6 +9,7 @@ import random
 import csv
 import json
 import logging
+import asyncio
 import threading
 from datetime import datetime, timedelta, timezone
 
@@ -718,4 +719,8 @@ def main():
 
 
 if __name__ == "__main__":
+    # Python 3.14+ no longer auto-creates an event loop in get_event_loop().
+    # Ensure one exists before run_polling() is called.
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     main()
