@@ -15,7 +15,7 @@ if not TELEGRAM_TOKEN:
     raise RuntimeError("Falta TELEGRAM_TOKEN en variables de entorno")
 
 SYMBOLS = [
-    {"symbol": "XAUUSD", "display": "Oro (XAU/USD)", "atr_sl": 1.0, "atr_tp": 2.0},
+    {"symbol": "XAU/USD", "display": "Oro (XAU/USD)", "atr_sl": 1.0, "atr_tp": 2.0},
     {"symbol": "BTC/USD", "display": "Bitcoin (BTC/USD)", "atr_sl": 1.5, "atr_tp": 3.0},
 ]
 

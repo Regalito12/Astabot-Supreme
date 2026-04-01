@@ -249,8 +249,12 @@ def fetch_candles(symbol):
             return None
 
         df = pd.DataFrame(data["values"])
-        for col in ["open", "high", "low", "close", "volume"]:
+        for col in ["open", "high", "low", "close"]:
             df[col] = pd.to_numeric(df[col], errors="coerce")
+        if "volume" in df.columns:
+            df["volume"] = pd.to_numeric(df["volume"], errors="coerce")
+        else:
+            df["volume"] = 0
         df["datetime"] = pd.to_datetime(df["datetime"])
         df = df.sort_values("datetime").reset_index(drop=True)
         return df
@@ -696,7 +700,7 @@ async def auto_scan(context: ContextTypes.DEFAULT_TYPE):
                 logger.error(f"Error enviando a Telegram: {e}")
 
 
-def main():
+async def main():
     application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
     application.add_handler(CommandHandler("start", cmd_start))
@@ -715,12 +719,25 @@ def main():
     logger.info(f"Alertas cada 5 min (noticias, sesiones, briefing)")
 
     logger.info("AstaBot 2.0 iniciado")
-    application.run_polling(drop_pending_updates=True)
+
+    # Python 3.14 compatible: use async context manager instead of run_polling()
+    async with application:
+        await application.start()
+        await application.updater.start_polling(drop_pending_updates=True)
+        logger.info("Polling iniciado, bot escuchando...")
+
+        # Keep running until interrupted
+        stop_event = asyncio.Event()
+        import signal as _signal
+        loop = asyncio.get_running_loop()
+        for sig in (_signal.SIGINT, _signal.SIGTERM):
+            loop.add_signal_handler(sig, stop_event.set)
+
+        await stop_event.wait()
+
+        await application.updater.stop()
+        await application.stop()
 
 
 if __name__ == "__main__":
-    # Python 3.14+ no longer auto-creates an event loop in get_event_loop().
-    # Ensure one exists before run_polling() is called.
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    main()
+    asyncio.run(main())
