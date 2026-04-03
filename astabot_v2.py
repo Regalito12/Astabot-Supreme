@@ -16,8 +16,8 @@ from datetime import datetime, timedelta, timezone
 import requests
 import pandas as pd
 from flask import Flask
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
 
 from config_v2 import (
     TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, SYMBOLS,
@@ -27,7 +27,7 @@ from config_v2 import (
     WEEKEND_ALERT_HOUR, WEEKEND_ALERT_DAY,
     BRIEFING_HOUR, BRIEFING_MINUTE, SESSIONS,
 )
-from technical_analysis import apply_indicators, score_signal, get_htf_trend, get_htf_trend
+from technical_analysis import apply_indicators, score_signal, get_htf_trend
 from risk import format_signal_message, log_signal
 from news_filter import get_upcoming_events, format_news_alert
 
@@ -339,27 +339,38 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_signal(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = []
+    for p in SYMBOLS:
+        keyboard.append([InlineKeyboardButton(p["display"], callback_data=f"analyze_{p['symbol']}")])
+    keyboard.append([InlineKeyboardButton("\U0001F504 Todos los pares", callback_data="analyze_all")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(
+        "\U0001F4CA Selecciona un activo para analizar:",
+        reply_markup=reply_markup,
+    )
+
+
+async def cmd_signal_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    data = query.data
+    if data == "analyze_all":
+        pairs_to_check = SYMBOLS
+    else:
+        symbol = data.replace("analyze_", "")
+        pairs_to_check = [p for p in SYMBOLS if p["symbol"] == symbol]
+        if not pairs_to_check:
+            await query.edit_message_text("\u274C Par no encontrado.")
+            return
+
     frases_analizando = [
         "\U0001F50D Analizando el mercado... un momento.",
         "\U0001F4CA Escaneando indicadores... espera.",
         "\U0001F916 Revisando los graficos... dame un segundo.",
     ]
-    await update.message.reply_text(random.choice(frases_analizando))
+    await query.edit_message_text(random.choice(frases_analizando))
 
-    pair_filter = None
-    if context.args:
-        arg = context.args[0].upper().replace("/", "")
-        for p in SYMBOLS:
-            if p["symbol"].upper().replace("/", "") == arg:
-                pair_filter = p
-                break
-        if not pair_filter:
-            await update.message.reply_text(
-                f"\u274C Par no reconocido. Usa: {', '.join([p['symbol'] for p in SYMBOLS])}"
-            )
-            return
-
-    pairs_to_check = [pair_filter] if pair_filter else SYMBOLS
     signals_found = 0
 
     for pair in pairs_to_check:
@@ -387,7 +398,7 @@ async def cmd_signal(update: Update, context: ContextTypes.DEFAULT_TYPE):
             signal["atr"],
             timestamp=datetime.now(timezone.utc),
         )
-        await update.message.reply_text(msg)
+        await context.bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=msg)
 
     if signals_found == 0:
         frases_no = [
@@ -395,7 +406,7 @@ async def cmd_signal(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "\U0001F440 El mercado no esta dando senal valida. Mejor esperar que perder.",
             "\U0001F6AB Sin senal por ahora. A veces no operar ES operar.",
         ]
-        await update.message.reply_text(random.choice(frases_no))
+        await context.bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=random.choice(frases_no))
 
 
 async def cmd_pnl(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -718,6 +729,7 @@ async def main():
     application.add_handler(CommandHandler("start", cmd_start))
     application.add_handler(CommandHandler("senal", cmd_signal))
     application.add_handler(CommandHandler("analizar", cmd_signal))
+    application.add_handler(CallbackQueryHandler(cmd_signal_callback, pattern='^analyze_'))
     application.add_handler(CommandHandler("pnl", cmd_pnl))
     application.add_handler(CommandHandler("status", cmd_status))
     application.add_handler(CommandHandler("historial", cmd_historial))
