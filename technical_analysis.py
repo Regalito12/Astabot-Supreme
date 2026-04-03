@@ -1,6 +1,6 @@
 """
 AstaBot 2.0 - Indicadores tecnicos y sistema de scoring
-EMA 50/200, RSI, ADX, Bollinger, ATR, VWAP
+EMA 50/200, RSI, ADX, Bollinger, ATR, VWAP + SMC (FVG, Order Blocks)
 Sistema de scoring 0-6 puntos
 """
 import os
@@ -21,18 +21,14 @@ def calc_vwap(df):
 def apply_indicators(df):
     df['EMA50'] = df['close'].ewm(span=50, adjust=False).mean()
     df['EMA200'] = df['close'].ewm(span=200, adjust=False).mean()
-
     df['RSI'] = RSIIndicator(df['close'], window=14).rsi().bfill()
     df['ADX'] = ADXIndicator(df['high'], df['low'], df['close'], window=14).adx().bfill()
-
     bb = BollingerBands(df['close'], window=20, window_dev=2)
     df['BB_High'] = bb.bollinger_hband().bfill()
     df['BB_Low'] = bb.bollinger_lband().bfill()
     df['BB_Middle'] = bb.bollinger_mavg().bfill()
-
     df['ATR'] = AverageTrueRange(df['high'], df['low'], df['close'], window=14).average_true_range().bfill()
     df['VWAP'] = calc_vwap(df)
-
     return df
 
 
@@ -66,6 +62,43 @@ def detect_rsi_divergence(df, lookback=40):
     rsi_highs = [rsi_vals[:half].argmax(), half + rsi_vals[half:].argmax()]
     if prices[price_highs[1]] > prices[price_highs[0]] and rsi_vals[rsi_highs[1]] < rsi_vals[rsi_highs[0]]:
         return -1
+    return 0
+
+
+def detect_fvg(df, lookback=20):
+    """Detect Fair Value Gaps (SMC)"""
+    if len(df) < lookback + 3:
+        return 0
+    recent = df.tail(lookback)
+    highs = recent['high'].values
+    lows = recent['low'].values
+    closes = recent['close'].values
+    for i in range(len(recent) - 3, 1, -1):
+        prev_high = highs[i - 2]
+        next_high = highs[i + 1]
+        if prev_high < next_high and closes[i - 1] > next_high:
+            return 1
+        prev_low = lows[i - 2]
+        next_low = lows[i + 1]
+        if prev_low > next_low and closes[i - 1] < next_low:
+            return -1
+    return 0
+
+
+def detect_order_block(df, lookback=15):
+    """Detect Order Blocks (SMC)"""
+    if len(df) < lookback + 5:
+        return 0
+    recent = df.tail(lookback)
+    for i in range(len(recent) - 5, 0, -1):
+        if recent['close'].iloc[i] < recent['open'].iloc[i]:
+            if recent['low'].iloc[i] == recent['low'].iloc[i:i+5].min():
+                if recent['close'].iloc[i+1] > recent['high'].iloc[i]:
+                    return 1
+        if recent['close'].iloc[i] > recent['open'].iloc[i]:
+            if recent['high'].iloc[i] == recent['high'].iloc[i:i+5].max():
+                if recent['close'].iloc[i+1] < recent['low'].iloc[i]:
+                    return -1
     return 0
 
 
@@ -143,6 +176,22 @@ def score_signal(df):
         score_sell += 1
         details_sell.append('DivRSI')
 
+    fvg = detect_fvg(df)
+    if fvg == 1:
+        score_buy += 1
+        details_buy.append('FVG')
+    elif fvg == -1:
+        score_sell += 1
+        details_sell.append('FVG')
+
+    ob = detect_order_block(df)
+    if ob == 1:
+        score_buy += 1
+        details_buy.append('OB')
+    elif ob == -1:
+        score_sell += 1
+        details_sell.append('OB')
+
     if score_buy > score_sell and score_buy >= 4:
         sl = price - atr * float(os.getenv('ATR_SL_MULT', '1.0'))
         tp = price + atr * float(os.getenv('ATR_TP_MULT', '2.0'))
@@ -166,3 +215,83 @@ def score_signal(df):
         }
 
     return None
+
+
+def get_setup_name(details, signal_type):
+    """Nombre profesional del setup basado en confirmaciones"""
+    d = details.split('+')
+    if 'Trend' in d and 'Rechazo' in d:
+        return 'Pullback EMA + Rechazo'
+    if 'Trend' in d and 'DivRSI' in d:
+        return 'Trend + Divergencia RSI'
+    if 'Trend' in d and 'BB' in ''.join(d):
+        return 'Trend + Bollinger Bounce'
+    if 'DivRSI' in d and 'BB' in ''.join(d):
+        return 'Divergencia + Bollinger'
+    if 'RSI' in ''.join(d) and 'BB' in ''.join(d):
+        return 'RSI + Bollinger Confluence'
+    if 'Trend' in d and 'ADX' in d:
+        return 'Trend Following'
+    if 'Rechazo' in d and 'VWAP' in d:
+        return 'VWAP Rejection'
+    if 'FVG' in d and 'OB' in d:
+        return 'SMC: FVG + Order Block'
+    if 'FVG' in d:
+        return 'SMC: Fair Value Gap'
+    if 'OB' in d:
+        return 'SMC: Order Block'
+    if 'DivRSI' in d:
+        return 'Divergencia RSI'
+    if 'Trend' in d:
+        return 'Trend Continuation'
+    return 'Multi-Indicator Confluence'
+
+
+def get_volatility_label(atr, price):
+    """Clasifica volatilidad"""
+    pct = (atr / price) * 100
+    if pct < 0.3:
+        return 'Baja'
+    if pct < 0.8:
+        return 'Media'
+    return 'Alta'
+
+
+def get_trend_label(price, ema50, ema200):
+    """Clasifica tendencia"""
+    if price > ema50 > ema200:
+        return 'Alcista'
+    if price < ema50 < ema200:
+        return 'Bajista'
+    return 'Lateral'
+
+
+def format_signal_pro(symbol_display, signal, price, sl, tp, score, details, atr, timestamp):
+    """Formato profesional de senal"""
+    emoji = "\U0001F7E2" if signal == 'buy' else "\U0001F534"
+    action = 'LONG' if signal == 'buy' else 'SHORT'
+    rr = round(abs(tp - price) / abs(price - sl), 2) if abs(price - sl) > 0 else 0
+    sl_pct = round(abs(price - sl) / price * 100, 2)
+    tp_pct = round(abs(tp - price) / price * 100, 2)
+    bars = '\u2588' * score + '\u2591' * (6 - score)
+    pct = round(score / 6 * 100)
+    setup = get_setup_name(details, signal)
+    vol_label = get_volatility_label(atr, price)
+    time_str = timestamp.strftime('%H:%M') if timestamp else '--:--'
+
+    lines = [
+        f'{emoji} {action} | {symbol_display} | {time_str} UTC',
+        '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501',
+        f'\U0001F4CA Setup: {setup}',
+        f'\U0001F525 Volatilidad: {vol_label}',
+        f'\U0001F3AF Confianza: {bars} {pct}%',
+        '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501',
+        f'\U0001F4B0 Entrada:  {price:.2f}',
+        f'\U0001F6D1 SL:       {sl:.2f} (-{sl_pct}%)',
+        f'\U0001F3AF TP:       {tp:.2f} (+{tp_pct}%)',
+        f'\U0001F4D0 R:R:      1:{rr}',
+        '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501',
+        f'\u26A0\ufe0f Riesgo: 1% | ATR: {atr:.2f}',
+        f'\U0001F4A1 "La disciplina es lo que separa a los ganadores del resto."',
+    ]
+    return '\n'.join(lines)

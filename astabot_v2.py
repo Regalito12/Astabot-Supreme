@@ -374,6 +374,7 @@ async def cmd_signal(update: Update, context: ContextTypes.DEFAULT_TYPE):
             signal["score"],
             signal["details"],
             signal["atr"],
+            timestamp=datetime.now(timezone.utc),
         )
         await update.message.reply_text(msg)
 
