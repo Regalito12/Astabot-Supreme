@@ -27,7 +27,7 @@ from config_v2 import (
     WEEKEND_ALERT_HOUR, WEEKEND_ALERT_DAY,
     BRIEFING_HOUR, BRIEFING_MINUTE, SESSIONS,
 )
-from technical_analysis import apply_indicators, score_signal
+from technical_analysis import apply_indicators, score_signal, get_htf_trend, get_htf_trend
 from risk import format_signal_message, log_signal
 from news_filter import get_upcoming_events, format_news_alert
 
@@ -227,16 +227,17 @@ def check_spread(symbol):
         return True
 
 
-def fetch_candles(symbol):
+def fetch_candles(symbol, interval=None):
     api_key = os.getenv("TWELVE_API_KEY", "")
     if not api_key:
         logger.error("Falta TWELVE_API_KEY")
         return None
 
+    iv = interval or INTERVAL
     url = "https://api.twelvedata.com/time_series"
     params = {
         "symbol": symbol,
-        "interval": INTERVAL,
+        "interval": iv,
         "outputsize": CANDLE_COUNT,
         "apikey": api_key,
     }
@@ -274,11 +275,21 @@ def analyze_pair(pair_config):
         logger.warning(f"Datos insuficientes para {symbol}")
         return None
 
+    # HTF confirmation: fetch 1H candles
+    htf_trend = 0
+    try:
+        htf_df = fetch_candles(symbol, interval="1h")
+        if htf_df is not None and len(htf_df) >= 200:
+            htf_df = apply_indicators(htf_df)
+            htf_trend = get_htf_trend(htf_df)
+    except Exception as e:
+        logger.warning(f"No se pudo obtener HTF para {symbol}: {e}")
+
     df = apply_indicators(df)
-    signal = score_signal(df)
+    signal = score_signal(df, htf_trend=htf_trend)
 
     if signal is None:
-        logger.info(f"Sin senal en {symbol} (score < 4)")
+        logger.info(f"Sin senal en {symbol} (score < 5 o volatilidad baja)")
         return None
 
     u = df.iloc[-1]
